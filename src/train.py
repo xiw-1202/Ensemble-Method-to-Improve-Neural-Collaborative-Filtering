@@ -371,8 +371,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train and evaluate recommendation models")
     
     # Data arguments
-    parser.add_argument("--data_dir", type=str, default="../data/processed", help="Directory containing processed data")
-    parser.add_argument("--output_dir", type=str, default="../results", help="Directory to save results")
+    parser.add_argument("--data_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "processed"), help="Directory containing processed data")
+    parser.add_argument("--output_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results"), help="Directory to save results")
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size for training")
     
     # Model arguments

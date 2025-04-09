@@ -32,14 +32,28 @@ def run_command(command, description=None):
     print(f"Running: {command}")
     start_time = time.time()
     
-    result = subprocess.run(command, shell=True, text=True)
+    # Use subprocess.Popen to capture output in real-time
+    process = subprocess.Popen(
+        command, 
+        shell=True, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.STDOUT,
+        universal_newlines=True
+    )
+    
+    # Print output in real-time
+    for line in process.stdout:
+        print(line, end='')
+    
+    # Wait for process to complete
+    process.wait()
     
     end_time = time.time()
     duration = end_time - start_time
     
-    print(f"\nCommand completed in {duration:.2f} seconds with return code {result.returncode}")
+    print(f"\nCommand completed in {duration:.2f} seconds with return code {process.returncode}")
     
-    return result.returncode
+    return process.returncode
 
 def main(args):
     """
@@ -73,6 +87,10 @@ def main(args):
             "Preprocessing data"
         )
     
+    # Use absolute paths for data and output directories
+    data_dir = os.path.join(project_dir, "data", "processed")
+    results_dir = os.path.join(project_dir, "results")
+    
     # Step 3: Train models
     if args.train_models or args.all:
         models = args.models if args.models else ["ncf", "gat", "ensemble"]
@@ -80,7 +98,7 @@ def main(args):
         for model in models:
             cuda_arg = "--use_cuda" if args.use_cuda else ""
             run_command(
-                f"python {os.path.join(src_dir, 'train.py')} --model {model} --epochs {args.epochs} {cuda_arg}",
+                f"python {os.path.join(src_dir, 'train.py')} --model {model} --epochs {args.epochs} --data_dir \"{data_dir}\" --output_dir \"{results_dir}\" {cuda_arg}",
                 f"Training {model.upper()} model"
             )
     
@@ -92,7 +110,7 @@ def main(args):
             reduced_grid_arg = "--reduced_grid" if args.reduced_grid else ""
             cuda_arg = "--use_cuda" if args.use_cuda else ""
             run_command(
-                f"python {os.path.join(src_dir, 'hyperparameter_tuning.py')} --model {model} --epochs {args.tune_epochs} --final_epochs {args.epochs} {reduced_grid_arg} {cuda_arg}",
+                f"python {os.path.join(src_dir, 'hyperparameter_tuning.py')} --model {model} --epochs {args.tune_epochs} --final_epochs {args.epochs} --data_dir \"{data_dir}\" --output_dir \"{results_dir}\" {reduced_grid_arg} {cuda_arg}",
                 f"Tuning hyperparameters for {model.upper()} model"
             )
     
@@ -102,7 +120,7 @@ def main(args):
         models_arg = " ".join(models)
         
         run_command(
-            f"python {os.path.join(src_dir, 'compare_models.py')} --models {models_arg}",
+            f"python {os.path.join(src_dir, 'compare_models.py')} --models {models_arg} --results_dir \"{results_dir}\" --output_dir \"{os.path.join(results_dir, 'comparison')}\"",
             "Comparing models"
         )
     

@@ -423,8 +423,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Demonstrate movie recommendations with trained models")
     
     # Path arguments
-    parser.add_argument("--data_dir", type=str, default="../data/processed", help="Directory containing processed data")
-    parser.add_argument("--models_dir", type=str, default="../results", help="Directory containing trained models")
+    parser.add_argument("--data_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "processed"), help="Directory containing processed data")
+    parser.add_argument("--models_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results"), help="Directory containing trained models")
     
     # Model arguments
     parser.add_argument("--models", type=str, nargs="+", default=["ncf", "gat", "ensemble"], help="Models to use for recommendations")

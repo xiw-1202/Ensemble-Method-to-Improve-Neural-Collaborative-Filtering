@@ -25,6 +25,18 @@ def load_data(data_dir, batch_size=128):
     dict
         Dictionary containing DataLoaders, mappings, and metadata
     """
+    # Convert relative path to absolute path if needed
+    if not os.path.isabs(data_dir):
+        project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        data_dir = os.path.join(project_dir, data_dir)
+    
+    # Check if the directory exists
+    if not os.path.exists(data_dir):
+        raise FileNotFoundError(f"Data directory not found: {data_dir}")
+        
+    # Print actual path for debugging
+    print(f"Loading data from: {data_dir}")
+    
     # Load dataframes
     train_df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
     val_df = pd.read_csv(os.path.join(data_dir, 'validation.csv'))

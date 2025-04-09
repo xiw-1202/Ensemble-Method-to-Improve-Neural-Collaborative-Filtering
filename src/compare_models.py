@@ -290,8 +290,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare different recommendation models")
     
     # Path arguments
-    parser.add_argument("--results_dir", type=str, default="../results", help="Directory containing results")
-    parser.add_argument("--output_dir", type=str, default="../results/comparison", help="Directory to save comparison results")
+    parser.add_argument("--results_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results"), help="Directory containing results")
+    parser.add_argument("--output_dir", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results", "comparison"), help="Directory to save comparison results")
     
     # Model arguments
     parser.add_argument("--models", type=str, nargs="+", default=["ncf", "gat", "ensemble"], help="Models to compare")
