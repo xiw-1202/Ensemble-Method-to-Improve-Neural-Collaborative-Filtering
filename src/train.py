@@ -94,10 +94,18 @@ def train_model(model, train_loader, val_loader, edge_index, num_epochs=30, lr=0
             
             # Forward pass
             try:
-                predictions = model(user_batch, item_batch, edge_index)
-            except TypeError:
-                # If model doesn't support edge_index (e.g., NCF)
-                predictions = model(user_batch, item_batch)
+                if isinstance(model, GATModel) or isinstance(model, EnsembleModel):
+                    # For GAT or Ensemble models that can use edge_index
+                    if edge_index is not None:
+                        predictions = model(user_batch, item_batch, edge_index)
+                    else:
+                        predictions = model(user_batch, item_batch)
+                else:
+                    # For NCF model that doesn't use edge_index
+                    predictions = model(user_batch, item_batch)
+            except Exception as e2:
+                print(f"Error in forward pass: {e2}")
+                break
             
             loss = criterion(predictions, rating_batch)
             
@@ -129,10 +137,18 @@ def train_model(model, train_loader, val_loader, edge_index, num_epochs=30, lr=0
                 
                 # Forward pass
                 try:
-                    predictions = model(user_batch, item_batch, edge_index)
-                except TypeError:
-                    # If model doesn't support edge_index (e.g., NCF)
-                    predictions = model(user_batch, item_batch)
+                    if isinstance(model, GATModel) or isinstance(model, EnsembleModel):
+                        # For GAT or Ensemble models that can use edge_index
+                        if edge_index is not None:
+                            predictions = model(user_batch, item_batch, edge_index)
+                        else:
+                            predictions = model(user_batch, item_batch)
+                    else:
+                        # For NCF model that doesn't use edge_index
+                        predictions = model(user_batch, item_batch)
+                except Exception as e2:
+                    print(f"Error in validation forward pass: {e2}")
+                    continue
                 
                 loss = criterion(predictions, rating_batch)
                 
@@ -337,9 +353,18 @@ def main(args):
         model.eval()
         with torch.no_grad():
             try:
-                predictions = model(all_user, all_items, edge_index)
-            except TypeError:
-                predictions = model(all_user, all_items)
+                if isinstance(model, GATModel) or isinstance(model, EnsembleModel):
+                    # For GAT or Ensemble models that can use edge_index
+                    if edge_index is not None:
+                        predictions = model(all_user, all_items, edge_index)
+                    else:
+                        predictions = model(all_user, all_items)
+                else:
+                    # For NCF model that doesn't use edge_index
+                    predictions = model(all_user, all_items)
+            except Exception as e:
+                print(f"Error generating sample recommendations: {e}")
+                continue
         
         # Convert to numpy
         predictions = predictions.cpu().numpy()
