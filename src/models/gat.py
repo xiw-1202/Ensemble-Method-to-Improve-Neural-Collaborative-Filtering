@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv
+import numpy as np
 
 class GATModel(nn.Module):
     """
@@ -48,37 +49,53 @@ class GATModel(nn.Module):
         # Output layer
         self.output_layer = nn.Linear(embedding_dim, 1)
         
-    def forward(self, edge_index, batch_user_idx, batch_item_idx):
+    def forward(self, user_indices, item_indices, edge_index=None):
         """
         Forward pass of the GAT model
         
         Parameters:
         -----------
-        edge_index : torch.Tensor
-            Graph edge indices (2 x num_edges)
-        batch_user_idx : torch.Tensor
+        user_indices : torch.Tensor
             Batch of user indices
-        batch_item_idx : torch.Tensor
+        item_indices : torch.Tensor
             Batch of item indices
+        edge_index : torch.Tensor, optional
+            Graph edge indices (2 x num_edges)
             
         Returns:
         --------
         torch.Tensor
             Predicted ratings (0-1 scale)
         """
-        # Create node features by combining user and item embeddings
-        x = torch.cat([
-            self.user_embedding.weight,
-            self.item_embedding.weight
-        ], dim=0)
-        
-        # Apply GAT layers
-        x = F.elu(self.gat1(x, edge_index))
-        x = F.elu(self.gat2(x, edge_index))
-        
-        # Extract relevant embeddings for the batch
-        user_emb = x[batch_user_idx]
-        item_emb = x[batch_item_idx + self.num_users]  # Offset for item indices
+        # Check if edge_index is provided
+        if edge_index is None:
+            # Fallback to simple embedding lookup when edge_index is not provided
+            user_emb = self.user_embedding(user_indices)
+            item_emb = self.item_embedding(item_indices)
+        else:
+            # Create node features by combining user and item embeddings
+            x = torch.cat([
+                self.user_embedding.weight,
+                self.item_embedding.weight
+            ], dim=0)
+            
+            # Use a subset of edge_index to avoid memory issues
+            # and ensure consistent dimensions for batch processing
+            if edge_index.size(1) > 100000:
+                # If edge_index is too large, sample a subset
+                perm = torch.randperm(edge_index.size(1))
+                sample_size = min(100000, edge_index.size(1))
+                edge_index_sample = edge_index[:, perm[:sample_size]]
+            else:
+                edge_index_sample = edge_index
+                
+            # Apply GAT layers
+            x = F.elu(self.gat1(x, edge_index_sample))
+            x = F.elu(self.gat2(x, edge_index_sample))
+            
+            # Extract relevant embeddings for the batch
+            user_emb = x[user_indices]
+            item_emb = x[item_indices + self.num_users]  # Offset for item indices
         
         # Compute dot product for prediction
         # Element-wise product followed by sum
@@ -107,20 +124,30 @@ class GATModel(nn.Module):
         users = user_item_interactions['userIdx'].values
         items = user_item_interactions['movieIdx'].values
         
-        # Create edge index
-        # Edge direction: user -> item
-        edge_index_user_to_item = torch.tensor([
-            users,
-            items + self.num_users  # Offset for item indices
-        ], dtype=torch.long)
+        # Limit the number of edges if there are too many
+        if len(users) > 50000:
+            # Sample a subset of interactions 
+            sample_size = 50000
+            indices = np.random.choice(len(users), sample_size, replace=False)
+            users = users[indices]
+            items = items[indices]
+            
+        # Create edge index for user -> item direction
+        user_to_item_src = users.astype(np.int64)
+        user_to_item_dst = (items + self.num_users).astype(np.int64)
         
-        # Edge direction: item -> user (for message passing in both directions)
-        edge_index_item_to_user = torch.tensor([
-            items + self.num_users,  # Offset for item indices
-            users
-        ], dtype=torch.long)
+        # Create edge index for item -> user direction
+        item_to_user_src = user_to_item_dst.copy()
+        item_to_user_dst = user_to_item_src.copy()
         
         # Combine both directions
-        edge_index = torch.cat([edge_index_user_to_item, edge_index_item_to_user], dim=1)
+        src_nodes = np.concatenate([user_to_item_src, item_to_user_src])
+        dst_nodes = np.concatenate([user_to_item_dst, item_to_user_dst])
         
-        return edge_index
+        # Create tensor
+        edge_index = torch.tensor([src_nodes, dst_nodes], dtype=torch.long)
+        
+        # Ensure no duplicate edges
+        unique_indices = torch.unique(edge_index, dim=1)
+        
+        return unique_indices
