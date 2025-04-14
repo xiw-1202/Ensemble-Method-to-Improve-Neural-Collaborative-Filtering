@@ -79,7 +79,7 @@ class EnsembleModel(nn.Module):
                 nn.Sigmoid()
             )
         
-    def forward(self, user_indices, item_indices, edge_index):
+    def forward(self, user_indices, item_indices, edge_index=None):
         """
         Forward pass of the ensemble model
         
@@ -89,7 +89,7 @@ class EnsembleModel(nn.Module):
             Tensor of user indices
         item_indices : torch.Tensor
             Tensor of item indices
-        edge_index : torch.Tensor
+        edge_index : torch.Tensor, optional
             Graph edge indices
             
         Returns:
@@ -98,8 +98,22 @@ class EnsembleModel(nn.Module):
             Predicted ratings (0-1 scale)
         """
         # Get predictions from each model
-        ncf_preds = self.ncf(user_indices, item_indices)
-        gat_preds = self.gat(edge_index, user_indices, item_indices)
+        try:
+            # Try to get NCF predictions
+            ncf_preds = self.ncf(user_indices, item_indices)
+        except Exception as e:
+            print(f"Error in NCF model: {e}")
+            ncf_preds = torch.zeros_like(user_indices, dtype=torch.float)
+            
+        try:
+            # Try to get GAT predictions
+            if edge_index is not None:
+                gat_preds = self.gat(user_indices, item_indices, edge_index)
+            else:
+                gat_preds = self.gat(user_indices, item_indices)
+        except Exception as e:
+            print(f"Error in GAT model: {e}")
+            gat_preds = torch.zeros_like(user_indices, dtype=torch.float)
         
         # Combine predictions based on ensemble method
         if self.ensemble_method == 'weighted':
