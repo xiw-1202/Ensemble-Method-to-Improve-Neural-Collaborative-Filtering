@@ -13,6 +13,7 @@ show_help() {
     echo "  --tune [models]       Tune hyperparameters for specific models"
     echo "  --compare             Compare model performance"
     echo "  --demo [user_id]      Generate recommendations"
+    echo "  --test [models]       Run quick tests with a small synthetic dataset"
     echo "  --help                Display this help message"
     echo ""
     echo "Examples:"
@@ -21,6 +22,7 @@ show_help() {
     echo "  ./run.sh --train ncf gat ensemble"
     echo "  ./run.sh --tune ensemble"
     echo "  ./run.sh --demo 123"
+    echo "  ./run.sh --test ncf gat ensemble"
 }
 
 # Check if no arguments are provided
@@ -34,7 +36,7 @@ while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         --all)
-            python src/run_pipeline.py --all
+            python3 src/run_pipeline.py --all
             shift
             ;;
         --download)
@@ -83,6 +85,19 @@ while [[ $# -gt 0 ]]; do
                 shift
             fi
             ;;
+        --test)
+            TEST_FLAG=true
+            shift
+            # Collect model names
+            TEST_MODELS=""
+            while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                TEST_MODELS="$TEST_MODELS $1"
+                shift
+            done
+            if [ -n "$TEST_MODELS" ]; then
+                TEST_MODELS_ARG="--models $TEST_MODELS"
+            fi
+            ;;
         --help)
             show_help
             exit 0
@@ -97,12 +112,17 @@ done
 
 # Run pipeline with collected flags
 if [ -n "$DOWNLOAD_FLAG" ] || [ -n "$PREPROCESS_FLAG" ] || [ -n "$TRAIN_FLAG" ] || [ -n "$TUNE_FLAG" ] || [ -n "$COMPARE_FLAG" ]; then
-    python src/run_pipeline.py $DOWNLOAD_FLAG $PREPROCESS_FLAG $TRAIN_FLAG $TRAIN_MODELS $TUNE_FLAG $TUNE_MODELS_ARG $COMPARE_FLAG
+    python3 src/run_pipeline.py $DOWNLOAD_FLAG $PREPROCESS_FLAG $TRAIN_FLAG $TRAIN_MODELS $TUNE_FLAG $TUNE_MODELS_ARG $COMPARE_FLAG
 fi
 
 # Run demo if requested
 if [ "$DEMO_FLAG" = true ]; then
-    python src/demo_recommendations.py $USER_ID --plot
+    python3 src/demo_recommendations.py $USER_ID --plot
+fi
+
+# Run test if requested
+if [ "$TEST_FLAG" = true ]; then
+    python3 test_models.py $TEST_MODELS_ARG
 fi
 
 echo "Done!"
