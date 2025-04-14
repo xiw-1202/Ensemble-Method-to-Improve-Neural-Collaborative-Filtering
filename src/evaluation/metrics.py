@@ -3,6 +3,7 @@
 Evaluation metrics for recommender systems
 """
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.metrics import mean_squared_error
 
@@ -222,7 +223,7 @@ def ndcg_at_k(predicted_items, relevant_items_with_scores, k=10):
     
     return dcg / idcg
 
-def evaluate_recommendations(model, test_data, user_mapping, item_mapping, edge_index, rating_threshold=3.5, k_values=[5, 10, 20]):
+def evaluate_recommendations(model, test_data, user_mapping, item_mapping, edge_index=None, rating_threshold=3.5, k_values=[5, 10, 20]):
     """
     Evaluate a recommendation model using various metrics
     
@@ -236,8 +237,8 @@ def evaluate_recommendations(model, test_data, user_mapping, item_mapping, edge_
         Mapping from original user IDs to indices
     item_mapping : dict
         Mapping from original item IDs to indices
-    edge_index : torch.Tensor
-        Graph edge indices for GAT
+    edge_index : torch.Tensor, optional
+        Graph edge indices for GAT (default: None)
     rating_threshold : float
         Threshold to consider an item as relevant
     k_values : list
@@ -287,14 +288,27 @@ def evaluate_recommendations(model, test_data, user_mapping, item_mapping, edge_
             
             # Get predictions
             try:
-                predictions = model(user_tensor, item_tensor, edge_index)
-            except TypeError:
-                # If model doesn't support edge_index (e.g., NCF)
-                predictions = model(user_tensor, item_tensor)
+                from models.gat import GATModel
+                from models.ensemble import EnsembleModel
+                
+                if isinstance(model, GATModel) or isinstance(model, EnsembleModel):
+                    # For GAT or Ensemble models that can use edge_index
+                    if edge_index is not None:
+                        predictions = model(user_tensor, item_tensor, edge_index)
+                    else:
+                        predictions = model(user_tensor, item_tensor)
+                else:
+                    # For NCF model that doesn't use edge_index
+                    predictions = model(user_tensor, item_tensor)
+            except Exception as e2:
+                print(f"Error during evaluation: {e2}")
+                return {metric: 0.0 for metric in ['precision@5', 'precision@10', 'precision@20',
+                                                   'recall@5', 'recall@10', 'recall@20',
+                                                   'ndcg@5', 'ndcg@10', 'ndcg@20', 'map']}
                 
             # Create a dataframe for sorting
             pred_df = pd.DataFrame({
-                'item': candidate_items,
+                'movieIdx': candidate_items,
                 'prediction': predictions.cpu().numpy()
             })
             
@@ -302,7 +316,7 @@ def evaluate_recommendations(model, test_data, user_mapping, item_mapping, edge_
             pred_df = pred_df.sort_values('prediction', ascending=False)
             
             # Get top predicted items
-            predicted_items = pred_df['item'].values
+            predicted_items = pred_df['movieIdx'].values
             
             # Create relevance scores dictionary for NDCG
             # Using actual ratings as relevance scores
@@ -322,9 +336,14 @@ def evaluate_recommendations(model, test_data, user_mapping, item_mapping, edge_
     for metric, values in results.items():
         results[metric] = sum(values) / len(values) if values else 0.0
     
-    # Calculate MAP
-    results['map'] = mean_average_precision([pred_df['item'].values for _, pred_df in user_groups], 
-                                           [group[group['rating'] >= rating_threshold]['movieIdx'].values 
-                                            for _, group in user_groups])
+    # Calculate MAP - Using 'movieIdx' column from pred_df which matches the column name in the dataframe
+    try:
+        results['map'] = mean_average_precision([pred_df['movieIdx'].values for user_idx, pred_df in user_groups], 
+                                              [group[group['rating'] >= rating_threshold]['movieIdx'].values.tolist() 
+                                               for user_idx, group in user_groups])
+    except KeyError as e:
+        print(f"Warning: KeyError in MAP calculation: {e}")
+        print(f"Available columns in pred_df: {next(iter(user_groups))[1].columns.tolist() if user_groups else []}")
+        results['map'] = 0.0
     
     return results
