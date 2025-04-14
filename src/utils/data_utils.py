@@ -173,10 +173,21 @@ def get_recommendations(model, user_id, mappings, edge_index, movies_df, n=10, e
     # Get predictions
     with torch.no_grad():
         try:
-            predictions = model(user_tensor, all_movies_tensor, edge_index)
-        except TypeError:
-            # If model doesn't support edge_index (e.g., NCF)
-            predictions = model(user_tensor, all_movies_tensor)
+            from models.gat import GATModel
+            from models.ensemble import EnsembleModel
+            
+            if isinstance(model, GATModel) or isinstance(model, EnsembleModel):
+                # For GAT or Ensemble models that can use edge_index
+                if edge_index is not None:
+                    predictions = model(user_tensor, all_movies_tensor, edge_index)
+                else:
+                    predictions = model(user_tensor, all_movies_tensor)
+            else:
+                # For NCF model that doesn't use edge_index
+                predictions = model(user_tensor, all_movies_tensor)
+        except Exception as e:
+            print(f"Error generating recommendations: {e}")
+            raise
     
     # Create a dataframe with movie indices and predictions
     recs_df = pd.DataFrame({
