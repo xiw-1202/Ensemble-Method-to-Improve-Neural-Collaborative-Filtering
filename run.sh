@@ -6,11 +6,11 @@ show_help() {
     echo "Usage: ./run.sh [options]"
     echo ""
     echo "Options:"
-    echo "  --all                 Run the complete pipeline"
+    echo "  --all                 Run the complete pipeline (always uses optimized GAT)"
     echo "  --download            Download the MovieLens dataset"
     echo "  --preprocess          Preprocess the data"
     echo "  --train [models]      Train specific models (ncf, gat, ensemble)"
-    echo "  --optimized-gat       Train with optimized GAT configuration"
+    echo "                        Note: GAT always uses optimized configuration"
     echo "  --tune [models]       Tune hyperparameters for specific models"
     echo "  --compare             Compare model performance"
     echo "  --demo [user_id]      Generate recommendations"
@@ -21,7 +21,7 @@ show_help() {
     echo "  ./run.sh --all"
     echo "  ./run.sh --download --preprocess"
     echo "  ./run.sh --train ncf gat ensemble"
-    echo "  ./run.sh --train gat --optimized-gat"
+    echo "  ./run.sh --train gat"
     echo "  ./run.sh --tune ensemble"
     echo "  ./run.sh --demo 123"
     echo "  ./run.sh --test ncf gat ensemble"
@@ -38,7 +38,8 @@ while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         --all)
-            python3 src/run_pipeline.py --all
+            # Run the complete pipeline with optimized GAT
+            python3 src/run_pipeline.py --all --optimized_gat
             shift
             ;;
         --download)
@@ -54,16 +55,25 @@ while [[ $# -gt 0 ]]; do
             shift
             # Collect model names
             MODELS=""
+            GAT_INCLUDED=false
             while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
                 MODELS="$MODELS $1"
+                if [[ "$1" == "gat" ]]; then
+                    GAT_INCLUDED=true
+                fi
                 shift
             done
             if [ -n "$MODELS" ]; then
                 TRAIN_MODELS="--models $MODELS"
             fi
+            # Always use optimized GAT if GAT is included
+            if [ "$GAT_INCLUDED" = true ]; then
+                OPTIMIZED_GAT_FLAG="--optimized_gat"
+            fi
             ;;
         --optimized-gat)
-            OPTIMIZED_GAT_FLAG="--optimized_gat"
+            # This option is kept for backward compatibility
+            # but doesn't do anything special now as GAT is always optimized
             shift
             ;;
         --tune)
@@ -71,12 +81,20 @@ while [[ $# -gt 0 ]]; do
             shift
             # Collect model names
             TUNE_MODELS=""
+            GAT_TUNE_INCLUDED=false
             while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
                 TUNE_MODELS="$TUNE_MODELS $1"
+                if [[ "$1" == "gat" ]]; then
+                    GAT_TUNE_INCLUDED=true
+                fi
                 shift
             done
             if [ -n "$TUNE_MODELS" ]; then
                 TUNE_MODELS_ARG="--tune_models $TUNE_MODELS"
+            fi
+            # Always include optimized parameters for GAT tuning
+            if [ "$GAT_TUNE_INCLUDED" = true ]; then
+                OPTIMIZED_GAT_FLAG="--optimized_gat"
             fi
             ;;
         --compare)
@@ -96,12 +114,20 @@ while [[ $# -gt 0 ]]; do
             shift
             # Collect model names
             TEST_MODELS=""
+            GAT_TEST_INCLUDED=false
             while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
                 TEST_MODELS="$TEST_MODELS $1"
+                if [[ "$1" == "gat" ]]; then
+                    GAT_TEST_INCLUDED=true
+                fi
                 shift
             done
             if [ -n "$TEST_MODELS" ]; then
                 TEST_MODELS_ARG="--models $TEST_MODELS"
+            fi
+            # Always use optimized GAT parameters for testing
+            if [ "$GAT_TEST_INCLUDED" = true ]; then
+                TEST_MODELS_ARG="$TEST_MODELS_ARG --gat_layers 3 --gat_residual --gat_subsampling_rate 0.9"
             fi
             ;;
         --help)
