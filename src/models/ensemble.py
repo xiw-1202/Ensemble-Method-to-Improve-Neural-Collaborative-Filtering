@@ -32,14 +32,24 @@ class EnsembleModel(nn.Module):
         Method for combining NCF and GAT predictions ('weighted', 'concat', or 'gate')
     """
     def __init__(self, num_users, num_items, embedding_dim=64, mlp_layers=[128, 64, 32], 
-                 gat_heads=4, dropout=0.2, share_embeddings=True, ensemble_method='weighted'):
+                 gat_heads=4, dropout=0.2, share_embeddings=True, ensemble_method='weighted',
+                 gat_layers=3, gat_residual=True, gat_subsampling_rate=0.8):
         super(EnsembleModel, self).__init__()
         
         # Create NCF model
         self.ncf = NCF(num_users, num_items, embedding_dim, mlp_layers, dropout)
         
-        # Create GAT model
-        self.gat = GATModel(num_users, num_items, embedding_dim, gat_heads, dropout)
+        # Create GAT model with improved architecture
+        self.gat = GATModel(
+            num_users, 
+            num_items, 
+            embedding_dim, 
+            gat_heads, 
+            dropout,
+            num_layers=gat_layers,
+            residual=gat_residual,
+            subsampling_rate=gat_subsampling_rate
+        )
         
         # Share embeddings if specified
         if share_embeddings:

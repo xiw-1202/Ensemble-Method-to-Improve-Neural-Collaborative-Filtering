@@ -10,6 +10,7 @@ show_help() {
     echo "  --download            Download the MovieLens dataset"
     echo "  --preprocess          Preprocess the data"
     echo "  --train [models]      Train specific models (ncf, gat, ensemble)"
+    echo "  --optimized-gat       Train with optimized GAT configuration"
     echo "  --tune [models]       Tune hyperparameters for specific models"
     echo "  --compare             Compare model performance"
     echo "  --demo [user_id]      Generate recommendations"
@@ -20,6 +21,7 @@ show_help() {
     echo "  ./run.sh --all"
     echo "  ./run.sh --download --preprocess"
     echo "  ./run.sh --train ncf gat ensemble"
+    echo "  ./run.sh --train gat --optimized-gat"
     echo "  ./run.sh --tune ensemble"
     echo "  ./run.sh --demo 123"
     echo "  ./run.sh --test ncf gat ensemble"
@@ -59,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             if [ -n "$MODELS" ]; then
                 TRAIN_MODELS="--models $MODELS"
             fi
+            ;;
+        --optimized-gat)
+            OPTIMIZED_GAT_FLAG="--optimized_gat"
+            shift
             ;;
         --tune)
             TUNE_FLAG="--tune_hyperparams"
@@ -112,7 +118,7 @@ done
 
 # Run pipeline with collected flags
 if [ -n "$DOWNLOAD_FLAG" ] || [ -n "$PREPROCESS_FLAG" ] || [ -n "$TRAIN_FLAG" ] || [ -n "$TUNE_FLAG" ] || [ -n "$COMPARE_FLAG" ]; then
-    python3 src/run_pipeline.py $DOWNLOAD_FLAG $PREPROCESS_FLAG $TRAIN_FLAG $TRAIN_MODELS $TUNE_FLAG $TUNE_MODELS_ARG $COMPARE_FLAG
+    python3 src/run_pipeline.py $DOWNLOAD_FLAG $PREPROCESS_FLAG $TRAIN_FLAG $TRAIN_MODELS $OPTIMIZED_GAT_FLAG $TUNE_FLAG $TUNE_MODELS_ARG $COMPARE_FLAG
 fi
 
 # Run demo if requested

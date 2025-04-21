@@ -246,7 +246,10 @@ def main(args):
             'num_items': [data['num_items']],
             'embedding_dim': [32, 64, 128],
             'heads': [2, 4, 8],
-            'dropout': [0.1, 0.2, 0.3]
+            'dropout': [0.1, 0.2, 0.3],
+            'num_layers': [2, 3, 4],
+            'residual': [True, False],
+            'subsampling_rate': [0.7, 0.8, 0.9]
         }
     elif args.model == 'ensemble':
         model_class = EnsembleModel
@@ -258,7 +261,10 @@ def main(args):
             'gat_heads': [2, 4, 8],
             'dropout': [0.1, 0.2, 0.3],
             'share_embeddings': [True, False],
-            'ensemble_method': ['weighted', 'concat', 'gate']
+            'ensemble_method': ['weighted', 'concat', 'gate'],
+            'gat_layers': [2, 3, 4],
+            'gat_residual': [True, False],
+            'gat_subsampling_rate': [0.7, 0.8, 0.9]
         }
     else:
         raise ValueError(f"Unknown model: {args.model}")

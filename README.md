@@ -61,6 +61,7 @@ We provide a convenient shell script to run different components of the system:
 # Run specific components
 ./run.sh --download --preprocess                # Just prepare the data
 ./run.sh --train ncf gat ensemble               # Train specific models
+./run.sh --train gat --optimized-gat            # Train with optimized GAT architecture
 ./run.sh --tune ensemble                        # Tune a specific model
 ./run.sh --demo 123                             # Generate recommendations for user 123
 ```
@@ -92,6 +93,9 @@ python src/run_pipeline.py --download_data --preprocess_data
 Train specific models:
 ```bash
 python src/run_pipeline.py --train_models --models ncf gat ensemble
+
+# Train with optimized GAT architecture
+python src/run_pipeline.py --train_models --models gat --optimized_gat
 ```
 
 Tune hyperparameters for a specific model:
@@ -144,6 +148,8 @@ class NCF(nn.Module):
 
 The GAT model applies graph attention mechanisms to capture complex relationships in the user-item interaction graph, using multi-head self-attention to learn important connections. The model handles large graphs by employing efficient sampling strategies.
 
+#### Standard GAT Implementation
+
 ```python
 class GATModel(nn.Module):
     def __init__(self, num_users, num_items, embedding_dim=64, heads=4, dropout=0.2):
@@ -155,6 +161,45 @@ class GATModel(nn.Module):
         self.gat1 = GATConv(embedding_dim, embedding_dim//heads, heads=heads, dropout=dropout)
         self.gat2 = GATConv(embedding_dim, embedding_dim, dropout=dropout)
 ```
+
+#### Optimized GAT Implementation
+
+We offer an enhanced GAT implementation with improved architecture:
+
+```python
+class GATModel(nn.Module):
+    def __init__(self, num_users, num_items, embedding_dim=64, heads=4, dropout=0.2, 
+                 num_layers=3, residual=True, subsampling_rate=0.8):
+        # Better initialization
+        nn.init.xavier_uniform_(self.user_embedding.weight)
+        nn.init.xavier_uniform_(self.item_embedding.weight)
+        
+        # Multiple GAT layers with residual connections
+        self.gat_layers = nn.ModuleList()
+        self.gat_layers.append(GATConv(embedding_dim, embedding_dim//heads, heads=heads, dropout=dropout))
+        
+        # Intermediate layers
+        for _ in range(num_layers - 2):
+            self.gat_layers.append(GATConv(embedding_dim, embedding_dim//heads, heads=heads, dropout=dropout))
+        
+        # MLP prediction instead of simple dot product
+        self.prediction_mlp = nn.Sequential(
+            nn.Linear(embedding_dim * 2, embedding_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_dim, embedding_dim // 2),
+            nn.ReLU(),
+            nn.Linear(embedding_dim // 2, 1)
+        )
+```
+
+The optimized implementation features:
+- Deeper network with configurable layers (default: 3 layers)
+- Residual connections for better gradient flow
+- Layer normalization for training stability
+- MLP-based prediction instead of simple dot product
+- Improved graph sampling (80-90% vs fixed 50k limit)
+- Xavier initialization for better convergence
 
 ### Ensemble Model
 

@@ -266,7 +266,10 @@ def main(args):
             num_items=data['num_items'],
             embedding_dim=args.embedding_dim,
             heads=args.gat_heads,
-            dropout=args.dropout
+            dropout=args.dropout,
+            num_layers=args.gat_layers,
+            residual=args.gat_residual,
+            subsampling_rate=args.gat_subsampling_rate
         )
     elif args.model == 'ensemble':
         model = EnsembleModel(
@@ -277,7 +280,10 @@ def main(args):
             gat_heads=args.gat_heads,
             dropout=args.dropout,
             share_embeddings=args.share_embeddings,
-            ensemble_method=args.ensemble_method
+            ensemble_method=args.ensemble_method,
+            gat_layers=args.gat_layers,
+            gat_residual=args.gat_residual,
+            gat_subsampling_rate=args.gat_subsampling_rate
         )
     else:
         raise ValueError(f"Unknown model: {args.model}")
@@ -406,6 +412,9 @@ if __name__ == "__main__":
     parser.add_argument("--layer_sizes", type=int, nargs="+", default=[128, 64, 32], help="Sizes of MLP layers")
     parser.add_argument("--num_layers", type=int, default=3, help="Number of MLP layers (if layer_sizes is a single value)")
     parser.add_argument("--gat_heads", type=int, default=4, help="Number of attention heads for GAT")
+    parser.add_argument("--gat_layers", type=int, default=3, help="Number of GAT layers")
+    parser.add_argument("--gat_residual", action="store_true", help="Use residual connections in GAT")
+    parser.add_argument("--gat_subsampling_rate", type=float, default=0.8, help="Subsampling rate for large edge indices in GAT")
     parser.add_argument("--dropout", type=float, default=0.2, help="Dropout probability")
     parser.add_argument("--share_embeddings", action="store_true", help="Share embeddings between NCF and GAT in ensemble model")
     parser.add_argument("--ensemble_method", type=str, default="weighted", choices=["weighted", "concat", "gate"], help="Method for ensemble combination")

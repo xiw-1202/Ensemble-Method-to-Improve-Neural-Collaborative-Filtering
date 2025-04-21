@@ -97,10 +97,36 @@ def main(args):
         
         for model in models:
             cuda_arg = "--use_cuda" if args.use_cuda else ""
-            run_command(
-                f"python {os.path.join(src_dir, 'train.py')} --model {model} --epochs {args.epochs} --data_dir \"{data_dir}\" --output_dir \"{results_dir}\" {cuda_arg}",
-                f"Training {model.upper()} model"
-            )
+            
+            # Standard training
+            if not args.optimized_gat or model != "gat":
+                run_command(
+                    f"python {os.path.join(src_dir, 'train.py')} --model {model} --epochs {args.epochs} --data_dir \"{data_dir}\" --output_dir \"{results_dir}\" {cuda_arg}",
+                    f"Training {model.upper()} model"
+                )
+            # Optimized GAT training
+            elif model == "gat" and args.optimized_gat:
+                # Create optimized GAT output directory
+                optimized_dir = os.path.join(results_dir, "optimized_gat")
+                os.makedirs(optimized_dir, exist_ok=True)
+                
+                run_command(
+                    f"python {os.path.join(src_dir, 'train.py')} --model gat "
+                    f"--embedding_dim {args.gat_embedding_dim} "
+                    f"--gat_heads {args.gat_heads} "
+                    f"--gat_layers {args.gat_layers} "
+                    f"{('--gat_residual ' if args.gat_residual else '')} "
+                    f"--gat_subsampling_rate {args.gat_subsampling_rate} "
+                    f"--dropout {args.gat_dropout} "
+                    f"--learning_rate {args.gat_learning_rate} "
+                    f"--weight_decay {args.gat_weight_decay} "
+                    f"--epochs {args.gat_epochs} "
+                    f"--patience {args.gat_patience} "
+                    f"--batch_size {args.gat_batch_size} "
+                    f"--data_dir \"{data_dir}\" "
+                    f"--output_dir \"{optimized_dir}\" {cuda_arg}",
+                    f"Training OPTIMIZED GAT model"
+                )
     
     # Step 4: Hyperparameter tuning
     if args.tune_hyperparams or args.all:
@@ -146,6 +172,20 @@ if __name__ == "__main__":
     parser.add_argument("--tune_epochs", type=int, default=10, help="Number of epochs for each tuning trial")
     parser.add_argument("--reduced_grid", action="store_true", help="Use reduced parameter grid for faster tuning")
     parser.add_argument("--use_cuda", action="store_true", help="Use CUDA if available")
+    
+    # Optimized GAT arguments
+    parser.add_argument("--optimized_gat", action="store_true", help="Train the optimized GAT model")
+    parser.add_argument("--gat_embedding_dim", type=int, default=128, help="Embedding dimension for optimized GAT")
+    parser.add_argument("--gat_heads", type=int, default=4, help="Number of attention heads for optimized GAT")
+    parser.add_argument("--gat_layers", type=int, default=3, help="Number of GAT layers for optimized model")
+    parser.add_argument("--gat_residual", action="store_true", help="Use residual connections in optimized GAT")
+    parser.add_argument("--gat_subsampling_rate", type=float, default=0.9, help="Subsampling rate for large edge indices")
+    parser.add_argument("--gat_dropout", type=float, default=0.2, help="Dropout probability for optimized GAT")
+    parser.add_argument("--gat_learning_rate", type=float, default=0.0005, help="Learning rate for optimized GAT")
+    parser.add_argument("--gat_weight_decay", type=float, default=1e-6, help="Weight decay for optimized GAT")
+    parser.add_argument("--gat_epochs", type=int, default=50, help="Number of training epochs for optimized GAT")
+    parser.add_argument("--gat_patience", type=int, default=10, help="Patience for optimized GAT early stopping")
+    parser.add_argument("--gat_batch_size", type=int, default=256, help="Batch size for optimized GAT training")
     
     args = parser.parse_args()
     

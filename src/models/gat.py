@@ -24,30 +24,56 @@ class GATModel(nn.Module):
         Number of attention heads
     dropout : float
         Dropout probability for regularization
+    num_layers : int
+        Number of GAT layers
+    residual : bool
+        Whether to use residual connections
     """
-    def __init__(self, num_users, num_items, embedding_dim=64, heads=4, dropout=0.2):
+    def __init__(self, num_users, num_items, embedding_dim=64, heads=4, dropout=0.2, 
+                 num_layers=3, residual=True, subsampling_rate=0.8):
         super(GATModel, self).__init__()
         
         # Embeddings (shared with NCF if using ensemble)
         self.user_embedding = nn.Embedding(num_users, embedding_dim)
         self.item_embedding = nn.Embedding(num_items, embedding_dim)
         
-        # Initialize embeddings
-        nn.init.normal_(self.user_embedding.weight, std=0.01)
-        nn.init.normal_(self.item_embedding.weight, std=0.01)
+        # Initialize embeddings with improved normalization
+        nn.init.xavier_uniform_(self.user_embedding.weight)
+        nn.init.xavier_uniform_(self.item_embedding.weight)
         
         # Store dimensions for computing node indices
         self.num_users = num_users
         self.num_items = num_items
+        self.embedding_dim = embedding_dim
+        self.residual = residual
+        self.subsampling_rate = subsampling_rate
         
         # Graph Attention layers
-        # First layer: multiple attention heads
-        self.gat1 = GATConv(embedding_dim, embedding_dim//heads, heads=heads, dropout=dropout)
-        # Second layer: combine attention heads
-        self.gat2 = GATConv(embedding_dim, embedding_dim, dropout=dropout)
+        self.gat_layers = nn.ModuleList()
         
-        # Output layer
-        self.output_layer = nn.Linear(embedding_dim, 1)
+        # First layer with multiple attention heads
+        self.gat_layers.append(GATConv(embedding_dim, embedding_dim//heads, heads=heads, dropout=dropout))
+        
+        # Intermediate layers
+        for _ in range(num_layers - 2):
+            self.gat_layers.append(GATConv(embedding_dim, embedding_dim//heads, heads=heads, dropout=dropout))
+        
+        # Final layer combining attention heads to original dimension
+        self.gat_layers.append(GATConv(embedding_dim, embedding_dim, dropout=dropout))
+        
+        # Layer normalization for stability
+        self.layer_norm = nn.LayerNorm(embedding_dim)
+        
+        # MLP for prediction instead of simple dot product
+        self.prediction_mlp = nn.Sequential(
+            nn.Linear(embedding_dim * 2, embedding_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_dim, embedding_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_dim // 2, 1)
+        )
         
     def forward(self, user_indices, item_indices, edge_index=None):
         """
@@ -69,40 +95,55 @@ class GATModel(nn.Module):
         """
         # Check if edge_index is provided
         if edge_index is None:
-            # Fallback to simple embedding lookup when edge_index is not provided
+            # Fallback to embedding lookup with MLP when edge_index is not provided
             user_emb = self.user_embedding(user_indices)
             item_emb = self.item_embedding(item_indices)
-        else:
-            # Create node features by combining user and item embeddings
-            x = torch.cat([
-                self.user_embedding.weight,
-                self.item_embedding.weight
-            ], dim=0)
-            
-            # Use a subset of edge_index to avoid memory issues
-            # and ensure consistent dimensions for batch processing
-            if edge_index.size(1) > 100000:
-                # If edge_index is too large, sample a subset
+            # Use MLP for prediction
+            combined = torch.cat([user_emb, item_emb], dim=1)
+            predictions = torch.sigmoid(self.prediction_mlp(combined).squeeze(-1))
+            return predictions
+        
+        # Create node features by combining user and item embeddings
+        x = torch.cat([
+            self.user_embedding.weight,
+            self.item_embedding.weight
+        ], dim=0)
+        
+        # Store original embeddings for residual connection
+        original_x = x
+        
+        # Apply GAT layers with residual connections
+        for i, gat_layer in enumerate(self.gat_layers):
+            # Only subsample for very large edge indices
+            if edge_index.size(1) > 500000:
+                # Use a higher sampling rate to preserve more connections
+                sample_size = int(edge_index.size(1) * self.subsampling_rate)
                 perm = torch.randperm(edge_index.size(1))
-                sample_size = min(100000, edge_index.size(1))
                 edge_index_sample = edge_index[:, perm[:sample_size]]
             else:
                 edge_index_sample = edge_index
                 
-            # Apply GAT layers
-            x = F.elu(self.gat1(x, edge_index_sample))
-            x = F.elu(self.gat2(x, edge_index_sample))
+            # Apply GAT layer
+            x_new = gat_layer(x, edge_index_sample)
+            x_new = F.elu(x_new)
             
-            # Extract relevant embeddings for the batch
-            user_emb = x[user_indices]
-            item_emb = x[item_indices + self.num_users]  # Offset for item indices
+            # Apply residual connection if dimensions match and not first layer
+            if self.residual and i > 0 and x.shape == x_new.shape:
+                x = x_new + x
+            else:
+                x = x_new
+            
+            # Apply layer normalization for stability
+            if hasattr(x, 'shape') and len(x.shape) > 1:
+                x = self.layer_norm(x)
         
-        # Compute dot product for prediction
-        # Element-wise product followed by sum
-        dot_product = (user_emb * item_emb).sum(dim=1)
+        # Extract relevant embeddings for the batch
+        user_emb = x[user_indices]
+        item_emb = x[item_indices + self.num_users]  # Offset for item indices
         
-        # Apply sigmoid for final prediction
-        predictions = torch.sigmoid(dot_product)
+        # Combine embeddings using MLP for prediction
+        combined = torch.cat([user_emb, item_emb], dim=1)
+        predictions = torch.sigmoid(self.prediction_mlp(combined).squeeze(-1))
         
         return predictions
 
@@ -124,10 +165,11 @@ class GATModel(nn.Module):
         users = user_item_interactions['userIdx'].values
         items = user_item_interactions['movieIdx'].values
         
-        # Limit the number of edges if there are too many
-        if len(users) > 50000:
-            # Sample a subset of interactions 
-            sample_size = 50000
+        # Use all interactions instead of limiting to a fixed number
+        # If the dataset is extremely large, use a high sampling rate instead of fixed number
+        if len(users) > 200000:
+            # Sample a larger subset of interactions
+            sample_size = min(int(len(users) * 0.8), 200000)
             indices = np.random.choice(len(users), sample_size, replace=False)
             users = users[indices]
             items = items[indices]
